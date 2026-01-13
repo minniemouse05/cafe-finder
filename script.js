@@ -1,7 +1,7 @@
 const API_BASE = "http://localhost:3000/api";
 
 // Tuning
-const RADIUS_METERS = 1500;
+const RADIUS_METERS = 3500;
 const MAX_RESULTS = 20;
 const LOCATION_CACHE_MS = 10 * 60 * 1000;
 
@@ -130,7 +130,8 @@ function displayCards(places, userLat, userLng) {
     let distanceText = "";
     if (placeLat && placeLng && userLat && userLng) {
       const miles = getDistanceMiles(userLat, userLng, placeLat, placeLng);
-      distanceText = miles < 0.1 ? "< 0.1 mi away" : `${miles.toFixed(1)} mi away`;
+      distanceText =
+        miles < 0.1 ? "< 0.1 mi away" : `${miles.toFixed(1)} mi away`;
     }
 
     // Analyze reviews for study score
@@ -156,7 +157,13 @@ function displayCards(places, userLat, userLng) {
       <img src="${placeholder}" alt="${escapeHtml(name)}" />
       <h3>${escapeHtml(name)}</h3>
       <p>⭐️ Rating: ${rating}</p>
-      ${hours ? `<p class="${isOpen ? "open-now" : "closed-now"}">${isOpen ? "Open now" : "Closed"}</p>` : ""}
+      ${
+        hours
+          ? `<p class="${isOpen ? "open-now" : "closed-now"}">${
+              isOpen ? "Open now" : "Closed"
+            }</p>`
+          : ""
+      }
       ${todayHours ? `<p><small>🕐 ${escapeHtml(todayHours)}</small></p>` : ""}
       ${distanceText ? `<p><small>📍 ${distanceText}</small></p>` : ""}
       ${studyBadge}
@@ -231,14 +238,21 @@ function showSaved() {
     const card = document.createElement("div");
     card.className = "location-card";
 
-    const studyBadge = getStudyBadge({ score: cafe.studyScore || 0, features: cafe.studyFeatures || [] });
+    const studyBadge = getStudyBadge({
+      score: cafe.studyScore || 0,
+      features: cafe.studyFeatures || [],
+    });
 
     card.innerHTML = `
       <img src="${cafe.photo}" alt="${escapeHtml(cafe.name)}" />
       <h3>${escapeHtml(cafe.name)}</h3>
       <p>⭐️ Rating: ${cafe.rating}</p>
       ${cafe.hours ? `<p><small>🕐 ${escapeHtml(cafe.hours)}</small></p>` : ""}
-      ${cafe.distance ? `<p><small>📍 ${escapeHtml(cafe.distance)}</small></p>` : ""}
+      ${
+        cafe.distance
+          ? `<p><small>📍 ${escapeHtml(cafe.distance)}</small></p>`
+          : ""
+      }
       ${studyBadge}
       ${
         cafe.mapsUri
@@ -284,9 +298,19 @@ function getTodayHours(hours) {
 
   // If weekdayDescriptions exists, use it
   if (hours.weekdayDescriptions && Array.isArray(hours.weekdayDescriptions)) {
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
     const today = days[new Date().getDay()];
-    const todayEntry = hours.weekdayDescriptions.find((d) => d.startsWith(today));
+    const todayEntry = hours.weekdayDescriptions.find((d) =>
+      d.startsWith(today)
+    );
     return todayEntry || null;
   }
 
@@ -295,8 +319,14 @@ function getTodayHours(hours) {
     const todayDay = new Date().getDay();
     const todayPeriod = hours.periods.find((p) => p.open?.day === todayDay);
     if (todayPeriod) {
-      const openTime = formatTime(todayPeriod.open?.hour, todayPeriod.open?.minute);
-      const closeTime = formatTime(todayPeriod.close?.hour, todayPeriod.close?.minute);
+      const openTime = formatTime(
+        todayPeriod.open?.hour,
+        todayPeriod.open?.minute
+      );
+      const closeTime = formatTime(
+        todayPeriod.close?.hour,
+        todayPeriod.close?.minute
+      );
       return `${openTime} – ${closeTime}`;
     }
   }
@@ -320,8 +350,10 @@ function getDistanceMiles(lat1, lng1, lat2, lng2) {
   const dLng = toRad(lng2 - lng1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -334,7 +366,10 @@ function toRad(deg) {
 function analyzeStudyScore(reviews) {
   if (!reviews || reviews.length === 0) return { score: 0, features: [] };
 
-  const allText = reviews.map((r) => r.text?.text || "").join(" ").toLowerCase();
+  const allText = reviews
+    .map((r) => r.text?.text || "")
+    .join(" ")
+    .toLowerCase();
 
   const categories = {
     wifi: /\b(wifi|wi-fi|internet|free wifi)\b/i,
@@ -356,7 +391,7 @@ function analyzeStudyScore(reviews) {
 function getStudyBadge(studyData) {
   const { score, features } = studyData;
   const hasWifi = features.includes("wifi");
-  const otherFeatures = features.filter(f => f !== "wifi").length;
+  const otherFeatures = features.filter((f) => f !== "wifi").length;
 
   if (hasWifi && otherFeatures >= 1) {
     // WiFi + at least 1 other feature = Great

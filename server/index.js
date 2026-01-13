@@ -27,6 +27,7 @@ app.post("/api/nearby", async (req, res) => {
 
   const body = {
     includedTypes: ["cafe"],
+    excludedTypes: ["museum", "art_gallery", "tourist_attraction"],
     maxResultCount: maxResults,
     locationRestriction: {
       circle: {
