@@ -5,9 +5,24 @@ const RADIUS_METERS = 3500;
 const MAX_RESULTS = 20;
 const LOCATION_CACHE_MS = 10 * 60 * 1000;
 
+// Current cafe data for action buttons
+let currentCafeData = null;
+let currentWrapper = null;
+
 function setStatus(msg) {
   const el = document.getElementById("status");
   if (el) el.textContent = msg || "";
+}
+
+function showEmptyState() {
+  document.getElementById("emptyState").classList.remove("hidden");
+  document.getElementById("cardStack").innerHTML = "";
+  document.getElementById("savedList").classList.remove("visible");
+  document.getElementById("actionBar").classList.remove("visible");
+}
+
+function hideEmptyState() {
+  document.getElementById("emptyState").classList.add("hidden");
 }
 
 // Called by your button
@@ -15,10 +30,11 @@ function getLocation() {
   const cache = JSON.parse(localStorage.getItem("cachedLocation") || "{}");
   const now = Date.now();
 
-  setStatus("📍 Getting your location…");
+  setStatus("Getting your location...");
+  hideEmptyState();
 
   if (cache.timestamp && now - cache.timestamp < LOCATION_CACHE_MS) {
-    setStatus("📍 Using cached location (last 10 min). Fetching cafes…");
+    setStatus("Fetching nearby cafes...");
     useLocation(cache.lat, cache.lng);
     return;
   }
@@ -26,6 +42,7 @@ function getLocation() {
   if (!navigator.geolocation) {
     alert("Geolocation not supported in this browser.");
     setStatus("");
+    showEmptyState();
     return;
   }
 
@@ -37,12 +54,13 @@ function getLocation() {
         "cachedLocation",
         JSON.stringify({ lat, lng, timestamp: now })
       );
-      setStatus("📍 Location found. Fetching cafes…");
+      setStatus("Fetching nearby cafes...");
       useLocation(lat, lng);
     },
     () => {
       alert("Location access denied or unavailable.");
       setStatus("");
+      showEmptyState();
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
@@ -68,6 +86,7 @@ async function useLocation(lat, lng) {
       console.error("Nearby search failed:", res.status, text);
       alert(`Places API error (${res.status}). Check console.`);
       setStatus("");
+      showEmptyState();
       return;
     }
 
@@ -77,15 +96,17 @@ async function useLocation(lat, lng) {
     if (places.length === 0) {
       alert("No cafes found nearby.");
       setStatus("");
+      showEmptyState();
       return;
     }
 
-    setStatus("☕️ Swipe left to skip, swipe right to save 💖");
+    setStatus("");
     displayCards(places, lat, lng);
   } catch (e) {
     console.error("Error fetching cafes:", e);
     alert("Error fetching cafes. Make sure the backend server is running.");
     setStatus("");
+    showEmptyState();
   }
 }
 
@@ -105,17 +126,19 @@ async function getPhotoUri(photoName) {
 }
 
 function displayCards(places, userLat, userLng) {
-  const container = document.querySelector(".cards");
-  container.classList.remove("list-mode");
+  const container = document.getElementById("cardStack");
+  const savedList = document.getElementById("savedList");
+  const actionBar = document.getElementById("actionBar");
+
   container.innerHTML = "";
+  savedList.classList.remove("visible");
+  actionBar.classList.add("visible");
+  hideEmptyState();
 
   places.forEach((place, i) => {
     const wrapper = document.createElement("div");
     wrapper.className = "swipe-wrapper";
     wrapper.style.zIndex = String(200 - i);
-
-    const card = document.createElement("div");
-    card.className = "location-card";
 
     const name = place.displayName?.text || "Unknown cafe";
     const rating = place.rating ?? "N/A";
@@ -130,16 +153,15 @@ function displayCards(places, userLat, userLng) {
     let distanceText = "";
     if (placeLat && placeLng && userLat && userLng) {
       const miles = getDistanceMiles(userLat, userLng, placeLat, placeLng);
-      distanceText =
-        miles < 0.1 ? "< 0.1 mi away" : `${miles.toFixed(1)} mi away`;
+      distanceText = miles < 0.1 ? "< 0.1 mi" : `${miles.toFixed(1)} mi`;
     }
 
     // Analyze reviews for study score
     const studyData = analyzeStudyScore(place.reviews);
-    const studyBadge = getStudyBadge(studyData);
+    const studyBadgeHtml = getStudyBadgeHtml(studyData);
 
-    // start with a placeholder; we'll replace if we can fetch a photoUri
-    const placeholder = "https://via.placeholder.com/250x150?text=No+Image";
+    // Placeholder image
+    const placeholder = "";
 
     const cafeData = {
       id: place.id,
@@ -151,60 +173,124 @@ function displayCards(places, userLat, userLng) {
       hours: todayHours,
       studyScore: studyData.score,
       studyFeatures: studyData.features,
+      isOpen,
     };
 
-    card.innerHTML = `
-      <img src="${placeholder}" alt="${escapeHtml(name)}" />
-      <h3>${escapeHtml(name)}</h3>
-      <p>⭐️ Rating: ${rating}</p>
-      ${
-        hours
-          ? `<p class="${isOpen ? "open-now" : "closed-now"}">${
-              isOpen ? "Open now" : "Closed"
-            }</p>`
-          : ""
-      }
-      ${todayHours ? `<p><small>🕐 ${escapeHtml(todayHours)}</small></p>` : ""}
-      ${distanceText ? `<p><small>📍 ${distanceText}</small></p>` : ""}
-      ${studyBadge}
-      ${
-        mapsUri
-          ? `<p><a href="${mapsUri}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a></p>`
-          : ""
-      }
-      <p><small>Swipe right to save 💖</small></p>
+    wrapper.innerHTML = `
+      <div class="cafe-card">
+        <div class="card-image">
+          <img src="${placeholder}" alt="${escapeHtml(name)}" />
+          <div class="image-gradient"></div>
+          <span class="swipe-badge save">SAVE</span>
+          <span class="swipe-badge skip">NOPE</span>
+        </div>
+        <div class="card-content">
+          <h2>${escapeHtml(name)}</h2>
+          <div class="card-meta">
+            <span class="rating">⭐ ${rating}</span>
+            ${distanceText ? `<span class="distance">${distanceText}</span>` : ""}
+            ${hours !== null ? `<span class="status ${isOpen ? "open" : "closed"}">${isOpen ? "Open" : "Closed"}</span>` : ""}
+          </div>
+          ${todayHours ? `<p class="card-hours">${escapeHtml(todayHours)}</p>` : ""}
+          <div class="card-tags">
+            ${studyBadgeHtml}
+          </div>
+          ${mapsUri ? `<a href="${mapsUri}" target="_blank" rel="noopener noreferrer" class="maps-link">View on Google Maps →</a>` : ""}
+        </div>
+      </div>
     `;
 
-    // Try to fetch a real image (optional; costs extra calls)
+    // Store cafe data on the wrapper element
+    wrapper.cafeData = cafeData;
+
+    // Try to fetch a real image
     const firstPhoto = place.photos?.[0]?.name;
     if (firstPhoto) {
       getPhotoUri(firstPhoto).then((uri) => {
         if (!uri) return;
-        const img = card.querySelector("img");
+        const img = wrapper.querySelector(".card-image img");
         if (img) img.src = uri;
         cafeData.photo = uri;
       });
     }
 
-    wrapper.appendChild(card);
     container.appendChild(wrapper);
 
-    // Swipe handling
+    // Swipe handling with Hammer.js
     const hammertime = new Hammer(wrapper);
+    hammertime.get("pan").set({ direction: Hammer.DIRECTION_HORIZONTAL });
     hammertime.get("swipe").set({ direction: Hammer.DIRECTION_HORIZONTAL });
+
+    // Pan for visual feedback
+    hammertime.on("pan", (e) => {
+      const rotation = e.deltaX * 0.05;
+      wrapper.style.transform = `translateX(${e.deltaX}px) rotate(${rotation}deg)`;
+      wrapper.style.transition = "none";
+
+      // Show swipe badges based on direction
+      if (e.deltaX > 50) {
+        wrapper.classList.add("swiping-right");
+        wrapper.classList.remove("swiping-left");
+      } else if (e.deltaX < -50) {
+        wrapper.classList.add("swiping-left");
+        wrapper.classList.remove("swiping-right");
+      } else {
+        wrapper.classList.remove("swiping-right", "swiping-left");
+      }
+    });
+
+    hammertime.on("panend", (e) => {
+      wrapper.style.transition = "transform 0.3s ease, opacity 0.3s ease";
+      wrapper.classList.remove("swiping-right", "swiping-left");
+
+      if (Math.abs(e.deltaX) > 100) {
+        // Swipe threshold met
+        if (e.deltaX > 0) {
+          saveCafe(cafeData);
+          dismissCard(wrapper, 1);
+        } else {
+          dismissCard(wrapper, -1);
+        }
+      } else {
+        // Snap back
+        wrapper.style.transform = "";
+      }
+    });
 
     hammertime.on("swipeleft", () => dismissCard(wrapper, -1));
     hammertime.on("swiperight", () => {
       saveCafe(cafeData);
-      dismissCard(wrapper, +1);
+      dismissCard(wrapper, 1);
     });
   });
+
+  // Set up first card for action buttons
+  updateCurrentCard();
+}
+
+function updateCurrentCard() {
+  const container = document.getElementById("cardStack");
+  const cards = container.querySelectorAll(".swipe-wrapper");
+
+  if (cards.length > 0) {
+    currentWrapper = cards[0];
+    currentCafeData = currentWrapper.cafeData;
+  } else {
+    currentWrapper = null;
+    currentCafeData = null;
+    // No more cards
+    setStatus("No more cafes! Check your saved list ♥");
+    document.getElementById("actionBar").classList.remove("visible");
+  }
 }
 
 function dismissCard(wrapper, dir) {
-  wrapper.style.transform = `translateX(${dir * 150}%) rotate(${dir * 15}deg)`;
+  wrapper.style.transform = `translateX(${dir * 150}%) rotate(${dir * 30}deg)`;
   wrapper.style.opacity = "0";
-  setTimeout(() => wrapper.remove(), 120);
+  setTimeout(() => {
+    wrapper.remove();
+    updateCurrentCard();
+  }, 300);
 }
 
 function saveCafe(cafeObj) {
@@ -213,60 +299,94 @@ function saveCafe(cafeObj) {
   if (!saved.find((c) => c.id === cafeObj.id)) {
     saved.push(cafeObj);
     localStorage.setItem("savedCafes", JSON.stringify(saved));
-    alert(`${cafeObj.name} saved!`);
-  } else {
-    alert(`${cafeObj.name} is already saved.`);
   }
 }
 
-// Called by your button
+// Action button handlers
+document.addEventListener("DOMContentLoaded", () => {
+  const nopeBtn = document.getElementById("nopeBtn");
+  const saveBtn = document.getElementById("saveBtn");
+
+  if (nopeBtn) {
+    nopeBtn.addEventListener("click", () => {
+      if (currentWrapper) {
+        dismissCard(currentWrapper, -1);
+      }
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      if (currentWrapper && currentCafeData) {
+        saveCafe(currentCafeData);
+        dismissCard(currentWrapper, 1);
+      }
+    });
+  }
+});
+
+// Show saved cafes
 function showSaved() {
-  const container = document.querySelector(".cards");
-  container.classList.add("list-mode");
-  container.innerHTML = "";
+  const cardStack = document.getElementById("cardStack");
+  const savedList = document.getElementById("savedList");
+  const actionBar = document.getElementById("actionBar");
+
+  cardStack.innerHTML = "";
+  actionBar.classList.remove("visible");
+  hideEmptyState();
+  savedList.classList.add("visible");
 
   const saved = JSON.parse(localStorage.getItem("savedCafes") || "[]");
 
-  setStatus("💾 Saved cafes");
+  setStatus("");
 
   if (saved.length === 0) {
-    container.innerHTML = "<p>No saved cafes yet 😢</p>";
+    savedList.innerHTML = `
+      <div class="saved-header">
+        <h2>Saved Cafes</h2>
+        <button class="back-btn" onclick="getLocation()">← Find More</button>
+      </div>
+      <div class="empty-saved">
+        <div class="icon">💔</div>
+        <p>No saved cafes yet.<br>Start swiping to save your favorites!</p>
+      </div>
+    `;
     return;
   }
 
-  saved.forEach((cafe) => {
-    const card = document.createElement("div");
-    card.className = "location-card";
+  let html = `
+    <div class="saved-header">
+      <h2>Saved Cafes (${saved.length})</h2>
+      <button class="back-btn" onclick="getLocation()">← Find More</button>
+    </div>
+  `;
 
-    const studyBadge = getStudyBadge({
+  saved.forEach((cafe) => {
+    const studyBadgeHtml = getStudyBadgeHtml({
       score: cafe.studyScore || 0,
       features: cafe.studyFeatures || [],
     });
 
-    card.innerHTML = `
-      <img src="${cafe.photo}" alt="${escapeHtml(cafe.name)}" />
-      <h3>${escapeHtml(cafe.name)}</h3>
-      <p>⭐️ Rating: ${cafe.rating}</p>
-      ${cafe.hours ? `<p><small>🕐 ${escapeHtml(cafe.hours)}</small></p>` : ""}
-      ${
-        cafe.distance
-          ? `<p><small>📍 ${escapeHtml(cafe.distance)}</small></p>`
-          : ""
-      }
-      ${studyBadge}
-      ${
-        cafe.mapsUri
-          ? `<p><a href="${cafe.mapsUri}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a></p>`
-          : ""
-      }
-      <button class="small-btn" data-remove="${cafe.id}">Remove</button>
+    html += `
+      <div class="saved-card">
+        <img src="${cafe.photo || ""}" alt="${escapeHtml(cafe.name)}" class="saved-card-image" />
+        <div class="saved-card-content">
+          <h3>${escapeHtml(cafe.name)}</h3>
+          <div class="saved-card-meta">
+            <span>⭐ ${cafe.rating}</span>
+            ${cafe.distance ? `<span>${cafe.distance}</span>` : ""}
+          </div>
+          ${studyBadgeHtml}
+          <button class="remove-btn" data-remove="${cafe.id}">Remove</button>
+        </div>
+      </div>
     `;
-
-    container.appendChild(card);
   });
 
-  // Remove buttons
-  container.querySelectorAll("[data-remove]").forEach((btn) => {
+  savedList.innerHTML = html;
+
+  // Remove button handlers
+  savedList.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       const id = e.currentTarget.getAttribute("data-remove");
       removeSaved(id);
@@ -281,14 +401,12 @@ function removeSaved(id) {
   localStorage.setItem("savedCafes", JSON.stringify(saved));
 }
 
-// tiny helper to keep innerHTML safe
+// Helper: escape HTML
 function escapeHtml(str) {
   return String(str).replace(
     /[&<>"']/g,
     (m) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[
-        m
-      ])
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m])
   );
 }
 
@@ -296,37 +414,19 @@ function escapeHtml(str) {
 function getTodayHours(hours) {
   if (!hours) return null;
 
-  // If weekdayDescriptions exists, use it
   if (hours.weekdayDescriptions && Array.isArray(hours.weekdayDescriptions)) {
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const today = days[new Date().getDay()];
-    const todayEntry = hours.weekdayDescriptions.find((d) =>
-      d.startsWith(today)
-    );
+    const todayEntry = hours.weekdayDescriptions.find((d) => d.startsWith(today));
     return todayEntry || null;
   }
 
-  // Otherwise, format from periods
   if (hours.periods && Array.isArray(hours.periods)) {
     const todayDay = new Date().getDay();
     const todayPeriod = hours.periods.find((p) => p.open?.day === todayDay);
     if (todayPeriod) {
-      const openTime = formatTime(
-        todayPeriod.open?.hour,
-        todayPeriod.open?.minute
-      );
-      const closeTime = formatTime(
-        todayPeriod.close?.hour,
-        todayPeriod.close?.minute
-      );
+      const openTime = formatTime(todayPeriod.open?.hour, todayPeriod.open?.minute);
+      const closeTime = formatTime(todayPeriod.close?.hour, todayPeriod.close?.minute);
       return `${openTime} – ${closeTime}`;
     }
   }
@@ -334,7 +434,6 @@ function getTodayHours(hours) {
   return null;
 }
 
-// Format hour/minute to readable time
 function formatTime(hour, minute) {
   if (hour === undefined) return "";
   const ampm = hour >= 12 ? "PM" : "AM";
@@ -343,17 +442,14 @@ function formatTime(hour, minute) {
   return `${h}${m} ${ampm}`;
 }
 
-// Calculate distance between two coordinates in miles (Haversine formula)
+// Calculate distance (Haversine formula)
 function getDistanceMiles(lat1, lng1, lat2, lng2) {
-  const R = 3958.8; // Earth's radius in miles
+  const R = 3958.8;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -362,14 +458,11 @@ function toRad(deg) {
   return deg * (Math.PI / 180);
 }
 
-// Analyze reviews to determine if cafe is good for studying
+// Analyze reviews for study score
 function analyzeStudyScore(reviews) {
   if (!reviews || reviews.length === 0) return { score: 0, features: [] };
 
-  const allText = reviews
-    .map((r) => r.text?.text || "")
-    .join(" ")
-    .toLowerCase();
+  const allText = reviews.map((r) => r.text?.text || "").join(" ").toLowerCase();
 
   const categories = {
     wifi: /\b(wifi|wi-fi|internet|free wifi)\b/i,
@@ -387,27 +480,22 @@ function analyzeStudyScore(reviews) {
   return { score: features.length, features };
 }
 
-// Get study badge HTML - WiFi weighted more heavily
-function getStudyBadge(studyData) {
+// Get study badge HTML
+function getStudyBadgeHtml(studyData) {
   const { score, features } = studyData;
   const hasWifi = features.includes("wifi");
   const otherFeatures = features.filter((f) => f !== "wifi").length;
 
   if (hasWifi && otherFeatures >= 1) {
-    // WiFi + at least 1 other feature = Great
-    return `<p class="study-badge great">📚 Great study spot</p>`;
+    return `<span class="study-badge great">📚 Great study spot</span>`;
   } else if (hasWifi) {
-    // WiFi only = Good
-    return `<p class="study-badge good">📚 Good study spot</p>`;
+    return `<span class="study-badge good">📚 Good study spot</span>`;
   } else if (score >= 2) {
-    // 2+ features without WiFi = Good
-    return `<p class="study-badge good">📚 Good study spot</p>`;
+    return `<span class="study-badge good">📚 Good study spot</span>`;
   } else if (score === 1) {
-    // 1 feature without WiFi = Inconclusive
-    return `<p class="study-badge inconclusive">📚 Inconclusive study spot</p>`;
+    return `<span class="study-badge inconclusive">📚 Inconclusive</span>`;
   } else {
-    // No features = Inconclusive
-    return `<p class="study-badge inconclusive">📚 Inconclusive study spot</p>`;
+    return `<span class="study-badge inconclusive">📚 Inconclusive</span>`;
   }
 }
 

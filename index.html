@@ -10,29 +10,54 @@
       href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☕️</text></svg>"
     />
     <link
-      href="https://fonts.googleapis.com/css2?family=Savate:ital,wght@0,200..900;1,200..900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
 
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
     <link rel="stylesheet" href="styles.css" />
-
-    <!-- NEW: load your JS -->
     <script defer src="script.js"></script>
   </head>
 
   <body>
-    <h1>☕️ Cafe Curator 🍵</h1>
-    <p>Find and save the best cafes near you.</p>
+    <!-- Header -->
+    <header class="app-header">
+      <h1 class="app-logo">☕ Cafe Curator</h1>
+      <button class="header-btn saved-btn" onclick="showSaved()" aria-label="View saved cafes">
+        <span class="icon">♥</span>
+      </button>
+    </header>
 
-    <div>
-      <button onclick="getLocation()">Find Cafes Near Me</button>
-      <button onclick="showSaved()">Show Saved Cafes</button>
+    <!-- Main content area -->
+    <main class="main-content">
+      <!-- Empty state / Start screen -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">☕</div>
+        <h2>Find Your Perfect Cafe</h2>
+        <p>Discover cozy spots to work, study, or just enjoy a great cup of coffee.</p>
+        <button class="primary-btn" onclick="getLocation()">
+          Find Cafes Near Me
+        </button>
+      </div>
+
+      <!-- Status message -->
+      <p id="status" class="status-text"></p>
+
+      <!-- Card stack container -->
+      <div class="card-stack" id="cardStack"></div>
+
+      <!-- Saved cafes list -->
+      <div class="saved-list" id="savedList"></div>
+    </main>
+
+    <!-- Action bar (shown when cards are visible) -->
+    <div class="action-bar" id="actionBar">
+      <button class="action-btn nope" id="nopeBtn" aria-label="Skip this cafe">
+        <span>✕</span>
+      </button>
+      <button class="action-btn save" id="saveBtn" aria-label="Save this cafe">
+        <span>♥</span>
+      </button>
     </div>
-
-    <!-- NEW: simple status line (optional but helpful) -->
-    <p id="status"></p>
-
-    <div class="cards"></div>
   </body>
 </html>
